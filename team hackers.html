@@ -1,0 +1,1509 @@
+<!DOCTYPE html>
+<html lang="en" class="dark">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>GRIDPOINT — Enterprise Supply Chain & Spatial Intelligence</title>
+  
+  <!-- React & ReactDOM -->
+  <script src="https://unpkg.com/react@18/umd/react.development.js" crossorigin></script>
+  <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js" crossorigin></script>
+  
+  <!-- Babel Standalone -->
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+  
+  <!-- Tailwind CSS -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          colors: {
+            brand: {
+              500: '#6366f1',
+              600: '#4f46e5',
+              700: '#4338ca'
+            }
+          }
+        }
+      }
+    }
+  </script>
+  
+  <!-- PapaParse for CSV Parsing -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
+
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&display=swap');
+    
+    body { 
+      font-family: 'Plus Jakarta Sans', sans-serif;
+      background-color: #020617;
+      color: #f8fafc;
+      overflow-x: hidden;
+    }
+
+    /* Navigation Dock Styling */
+    .dock-wrapper {
+      perspective: 1000px;
+    }
+
+    .dock-pill-indicator {
+      transition: transform 0.4s cubic-bezier(0.34, 1.56, 0.64, 1), width 0.35s ease;
+    }
+
+    .dock-btn {
+      transition: color 0.3s ease, transform 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+    }
+
+    .dock-btn:hover {
+      transform: translateY(-2px);
+    }
+
+    /* Interactive Hover Feature Cards */
+    .feature-card {
+      transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    }
+    .feature-card:hover {
+      transform: translateY(-6px);
+      border-color: rgba(99, 102, 241, 0.5);
+      box-shadow: 0 12px 30px -10px rgba(99, 102, 241, 0.25);
+    }
+
+    /* Custom Scrollbar */
+    ::-webkit-scrollbar {
+      width: 6px;
+      height: 6px;
+    }
+    ::-webkit-scrollbar-track {
+      background: #020617;
+    }
+    ::-webkit-scrollbar-thumb {
+      background: #1e293b;
+      border-radius: 4px;
+    }
+    ::-webkit-scrollbar-thumb:hover {
+      background: #334155;
+    }
+
+    /* Custom Google Maps InfoWindow Styling Overrides */
+    .gm-style .gm-style-iw-c {
+      background-color: #0f172a !important;
+      border: 1px solid #334155 !important;
+      border-radius: 16px !important;
+      box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.5), 0 8px 10px -6px rgba(0, 0, 0, 0.5) !important;
+      padding: 0 !important;
+    }
+    .gm-style .gm-style-iw-tc::after {
+      background-color: #0f172a !important;
+    }
+    .gm-style .gm-style-iw-d {
+      overflow: hidden !important;
+      padding: 12px 16px !important;
+    }
+    .gm-ui-hover-effect {
+      filter: invert(1) !important;
+      margin-top: 4px !important;
+      margin-right: 4px !important;
+    }
+  </style>
+</head>
+<body class="bg-slate-950 text-slate-100 min-h-screen antialiased selection:bg-indigo-500 selection:text-white">
+  <div id="root"></div>
+
+  <script type="text/babel">
+    const { useState, useEffect, useRef } = React;
+
+    const PREDEFINED_API_KEY = "AIzaSyAezS1S57VUC9k25010drd1QSwUe-2wcVY";
+
+    const DEFAULT_NEIGHBORHOODS = [
+      { id: '1', name: 'Koramangala Hub', lat: 12.9352, lon: 77.6245, orders: 1200 },
+      { id: '2', name: 'Indiranagar Core', lat: 12.9784, lon: 77.6408, orders: 950 },
+      { id: '3', name: 'Jayanagar Sector', lat: 12.9308, lon: 77.5838, orders: 800 },
+      { id: '4', name: 'Whitefield Tech Park', lat: 12.9698, lon: 77.7500, orders: 1800 },
+      { id: '5', name: 'HSR Layout South', lat: 12.9121, lon: 77.6445, orders: 1100 },
+      { id: '6', name: 'Electronic City Phase 1', lat: 12.8452, lon: 77.6602, orders: 1400 },
+      { id: '7', name: 'Hebbal Gateway', lat: 13.0358, lon: 77.5970, orders: 600 },
+      { id: '8', name: 'Marathahalli Junction', lat: 12.9591, lon: 77.6974, orders: 1300 },
+      { id: '9', name: 'MG Road Business Dist', lat: 12.9756, lon: 77.6066, orders: 750 },
+      { id: '10', name: 'Banashankari West', lat: 12.9255, lon: 77.5468, orders: 500 },
+      { id: '11', name: 'Yelahanka North', lat: 13.1007, lon: 77.5963, orders: 450 },
+      { id: '12', name: 'Bellandur Lake Zone', lat: 12.9260, lon: 77.6762, orders: 1600 }
+    ];
+
+    const PALETTE = ['#818cf8', '#34d399', '#fbbf24', '#f472b6', '#a78bfa', '#22d3ee', '#f87171'];
+
+    // EXPANDED VEHICLE TYPES
+    const VEHICLE_TYPES = {
+      TWO_WHEELER: { name: '2-Wheeler (EV / Bike)', fuelCostPerKm: 1.8, capacity: 40, speedKmH: 24 },
+      VAN: { name: 'Cargo Van (LCV)', fuelCostPerKm: 12.0, capacity: 400, speedKmH: 35 },
+      MDT: { name: 'Medium Duty Truck (MDT)', fuelCostPerKm: 22.0, capacity: 1000, speedKmH: 30 },
+      HDT: { name: 'Heavy Duty Truck (HDT)', fuelCostPerKm: 34.0, capacity: 2500, speedKmH: 26 },
+      COLD_CHAIN: { name: 'Refrigerated Cold Chain', fuelCostPerKm: 28.0, capacity: 800, speedKmH: 28 }
+    };
+
+    const GOOGLE_DARK_STYLE = [
+      { elementType: "geometry", stylers: [{ color: "#0b0f19" }] },
+      { elementType: "labels.text.fill", stylers: [{ color: "#746855" }] },
+      { elementType: "labels.text.stroke", stylers: [{ color: "#242f3e" }] },
+      { featureType: "administrative.locality", elementType: "labels.text.fill", stylers: [{ color: "#d59563" }] },
+      { featureType: "poi", elementType: "labels.text.fill", stylers: [{ color: "#d59563" }] },
+      { featureType: "poi.park", elementType: "geometry", stylers: [{ color: "#0e1726" }] },
+      { featureType: "poi.park", elementType: "labels.text.fill", stylers: [{ color: "#6b9a76" }] },
+      { featureType: "road", elementType: "geometry", stylers: [{ color: "#1a2332" }] },
+      { featureType: "road", elementType: "geometry.stroke", stylers: [{ color: "#121824" }] },
+      { featureType: "road", elementType: "labels.text.fill", stylers: [{ color: "#9ca5b3" }] },
+      { featureType: "road.highway", elementType: "geometry", stylers: [{ color: "#2d3748" }] },
+      { featureType: "road.highway", elementType: "geometry.stroke", stylers: [{ color: "#1f2937" }] },
+      { featureType: "road.highway", elementType: "labels.text.fill", stylers: [{ color: "#f3f4f6" }] },
+      { featureType: "water", elementType: "geometry", stylers: [{ color: "#060a12" }] },
+      { featureType: "water", elementType: "labels.text.fill", stylers: [{ color: "#515c6d" }] },
+      { featureType: "water", elementType: "labels.text.stroke", stylers: [{ color: "#17263c" }] }
+    ];
+
+    function haversineDistance(lat1, lon1, lat2, lon2) {
+      const R = 6371;
+      const dLat = (lat2 - lat1) * Math.PI / 180;
+      const dLon = (lon2 - lon1) * Math.PI / 180;
+      const a = Math.sin(dLat/2) * Math.sin(dLat/2) +
+                Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
+                Math.sin(dLon/2) * Math.sin(dLon/2);
+      return R * (2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a)));
+    }
+
+    // CALCULATE CENTRALIZED BASELINE UNOPTIMIZED CENTER
+    function calculateCentralizedCenter(neighborhoods) {
+      let sumLat = 0, sumLon = 0, totalOrders = 0;
+      neighborhoods.forEach(item => {
+        sumLat += item.lat * item.orders;
+        sumLon += item.lon * item.orders;
+        totalOrders += item.orders;
+      });
+      return { 
+        id: 0, 
+        name: 'Centralized Mega Hub', 
+        lat: sumLat / (totalOrders || 1), 
+        lon: sumLon / (totalOrders || 1) 
+      };
+    }
+
+    function recalculateMetrics(warehouses, neighborhoods, params, unoptimizedCenterOverride) {
+      const { 
+        fuelPrice, 
+        trafficMultiplier, 
+        vehicleType, 
+        fixedWhCost, 
+        capacityConstraint, 
+        maxRadiusConstraint,
+        demandMultiplier 
+      } = params;
+
+      const vehicle = VEHICLE_TYPES[vehicleType] || VEHICLE_TYPES.VAN;
+      let totalDistanceWeighted = 0;
+      let radiusViolations = 0;
+
+      const scaledNeighborhoods = neighborhoods.map(n => ({
+        ...n,
+        effectiveOrders: Math.round(n.orders * (demandMultiplier / 100))
+      }));
+
+      const assignments = scaledNeighborhoods.map(pt => {
+        let minDist = Infinity;
+        let bestCluster = 0;
+        warehouses.forEach((w, idx) => {
+          const dist = haversineDistance(pt.lat, pt.lon, w.lat, w.lon);
+          if (dist < minDist) {
+            minDist = dist;
+            bestCluster = idx;
+          }
+        });
+
+        const exceedsRadius = maxRadiusConstraint > 0 && minDist > maxRadiusConstraint;
+        if (exceedsRadius) radiusViolations++;
+
+        totalDistanceWeighted += minDist * pt.effectiveOrders;
+        return { ...pt, assignedWarehouse: bestCluster, distance: minDist, exceedsRadius };
+      });
+
+      const updatedWarehouses = warehouses.map((w, idx) => {
+        const assigned = assignments.filter(a => a.assignedWarehouse === idx);
+        const totalClusterOrders = assigned.reduce((acc, curr) => acc + curr.effectiveOrders, 0);
+        const totalClusterDist = assigned.reduce((acc, curr) => acc + (curr.distance * curr.effectiveOrders), 0);
+        const avgDist = assigned.length > 0 ? (totalClusterDist / totalClusterOrders) : 0;
+
+        return {
+          ...w,
+          id: idx + 1,
+          name: `Warehouse ${idx + 1}`,
+          label: `W${idx + 1}`,
+          assignedCount: assigned.length,
+          totalOrders: totalClusterOrders,
+          avgDistanceKm: avgDist.toFixed(1),
+          capacityUtilization: capacityConstraint ? ((totalClusterOrders / capacityConstraint) * 100).toFixed(1) : '100',
+          exceedsCapacity: capacityConstraint ? totalClusterOrders > capacityConstraint : false
+        };
+      });
+
+      const fleetRequired = Math.ceil(
+        assignments.reduce((sum, item) => sum + item.effectiveOrders, 0) / vehicle.capacity
+      );
+      
+      const variableFuelCost = Math.round(totalDistanceWeighted * (vehicle.fuelCostPerKm * (fuelPrice / 100)));
+      const laborAndOpCost = Math.round(totalDistanceWeighted * 1.8 * trafficMultiplier);
+      const totalInfraCost = warehouses.length * fixedWhCost;
+      const totalDeliveryCost = variableFuelCost + laborAndOpCost;
+      const totalCombinedCost = totalDeliveryCost + totalInfraCost;
+
+      const avgSpeedWithTraffic = vehicle.speedKmH / trafficMultiplier;
+      const totalDeliveryHours = (totalDistanceWeighted / avgSpeedWithTraffic).toFixed(1);
+
+      // Dynamically calculate Centralized Baseline Metrics
+      const centerNode = unoptimizedCenterOverride || calculateCentralizedCenter(neighborhoods);
+      const baselineCalc = (warehouses.length === 1 && warehouses[0].lat === centerNode.lat)
+        ? { afterDistanceKm: Math.round(totalDistanceWeighted), totalDeliveryCost, totalCombinedCost }
+        : recalculateMetrics([centerNode], neighborhoods, params, centerNode);
+
+      const distanceReductionPct = baselineCalc.afterDistanceKm > 0
+        ? (((baselineCalc.afterDistanceKm - totalDistanceWeighted) / baselineCalc.afterDistanceKm) * 100).toFixed(1)
+        : '0.0';
+
+      return {
+        assignments,
+        warehouses: updatedWarehouses,
+        afterDistanceKm: Math.round(totalDistanceWeighted),
+        variableFuelCost,
+        laborAndOpCost,
+        totalInfraCost,
+        totalDeliveryCost,
+        totalCombinedCost,
+        fleetRequired,
+        totalDeliveryHours,
+        radiusViolations,
+        unoptimizedCenter: centerNode,
+        beforeDistanceKm: baselineCalc.afterDistanceKm,
+        beforeDeliveryCost: baselineCalc.totalDeliveryCost,
+        beforeTotalCost: baselineCalc.totalCombinedCost,
+        distanceReductionPct: parseFloat(distanceReductionPct)
+      };
+    }
+
+    function runOptimization(data, params) {
+      if (!data || data.length === 0) return null;
+      const { k, demandMultiplier } = params;
+
+      const scaledData = data.map(d => ({
+        ...d,
+        effectiveOrders: Math.round(d.orders * (demandMultiplier / 100))
+      }));
+
+      const unoptimizedCenter = calculateCentralizedCenter(scaledData);
+
+      let centroids = [];
+      const firstIdx = Math.floor(Math.random() * scaledData.length);
+      centroids.push({ id: 1, lat: scaledData[firstIdx].lat, lon: scaledData[firstIdx].lon });
+
+      while (centroids.length < Math.min(k, scaledData.length)) {
+        let distances = scaledData.map(pt => {
+          let minD = Infinity;
+          centroids.forEach(c => {
+            const d = haversineDistance(pt.lat, pt.lon, c.lat, c.lon);
+            if (d < minD) minD = d;
+          });
+          return minD * minD * pt.effectiveOrders;
+        });
+        
+        const sumD = distances.reduce((a, b) => a + b, 0);
+        let rand = Math.random() * sumD;
+        let chosenIdx = 0;
+        for (let i = 0; i < distances.length; i++) {
+          rand -= distances[i];
+          if (rand <= 0) { chosenIdx = i; break; }
+        }
+        centroids.push({ id: centroids.length + 1, lat: scaledData[chosenIdx].lat, lon: scaledData[chosenIdx].lon });
+      }
+
+      for (let iter = 0; iter < 30; iter++) {
+        const assignments = scaledData.map(pt => {
+          let minDist = Infinity;
+          let bestCluster = 0;
+          centroids.forEach((c, idx) => {
+            const dist = haversineDistance(pt.lat, pt.lon, c.lat, c.lon);
+            if (dist < minDist) { minDist = dist; bestCluster = idx; }
+          });
+          return { ...pt, assignedWarehouse: bestCluster, distance: minDist };
+        });
+
+        centroids = centroids.map((c, cIdx) => {
+          const clusterPts = assignments.filter(a => a.assignedWarehouse === cIdx);
+          if (clusterPts.length === 0) return c;
+          let wLat = 0, wLon = 0, clusterOrders = 0;
+          clusterPts.forEach(p => {
+            wLat += p.lat * p.effectiveOrders;
+            wLon += p.lon * p.effectiveOrders;
+            clusterOrders += p.effectiveOrders;
+          });
+          return { id: cIdx + 1, lat: wLat / clusterOrders, lon: wLon / clusterOrders };
+        });
+      }
+
+      const rawCalc = recalculateMetrics(centroids, data, params, unoptimizedCenter);
+
+      const tradeOffCurve = [];
+      for (let testK = 1; testK <= Math.min(6, scaledData.length); testK++) {
+        let testCentroids = centroids.slice(0, testK);
+        if (testCentroids.length < testK) testCentroids = centroids;
+        const calcK = recalculateMetrics(testCentroids, data, params, unoptimizedCenter);
+        tradeOffCurve.push({
+          k: testK,
+          deliveryCost: calcK.totalDeliveryCost,
+          infraCost: testK * params.fixedWhCost,
+          totalCost: calcK.totalCombinedCost
+        });
+      }
+
+      return {
+        ...rawCalc,
+        tradeOffCurve
+      };
+    }
+
+    function useGoogleMaps(apiKey) {
+      const [isLoaded, setIsLoaded] = useState(false);
+
+      useEffect(() => {
+        if (!apiKey) return;
+        if (window.google && window.google.maps) {
+          setIsLoaded(true);
+          return;
+        }
+
+        const existingScript = document.getElementById('google-maps-script');
+        if (existingScript) existingScript.remove();
+
+        const script = document.createElement('script');
+        script.id = 'google-maps-script';
+        script.src = `https://maps.googleapis.com/maps/api/js?key=${apiKey}&libraries=places,geometry`;
+        script.async = true;
+        script.defer = true;
+        script.onload = () => setIsLoaded(true);
+        script.onerror = () => setIsLoaded(false);
+        document.head.appendChild(script);
+      }, [apiKey]);
+
+      return isLoaded;
+    }
+
+    // --- MAIN APP COMPONENT ---
+    function App() {
+      const [screen, setScreen] = useState('landing');
+      const [neighborhoods, setNeighborhoods] = useState(DEFAULT_NEIGHBORHOODS);
+      const [selectedWarehouseId, setSelectedWarehouseId] = useState(null);
+      const [isSideTabOpen, setIsSideTabOpen] = useState(false);
+
+      const [params, setParams] = useState({
+        k: 3,
+        capacityConstraint: 5000,
+        maxRadiusConstraint: 18,
+        fixedWhCost: 150000,
+        fuelPrice: 100,
+        trafficMultiplier: 1.25,
+        vehicleType: 'VAN',
+        demandMultiplier: 100
+      });
+
+      const [results, setResults] = useState(null);
+      const isGoogleMapsLoaded = useGoogleMaps(PREDEFINED_API_KEY);
+
+      const handleStartOptimization = (overrideParams) => {
+        const activeParams = overrideParams || params;
+        setScreen('optimizing');
+        setTimeout(() => {
+          const res = runOptimization(neighborhoods, activeParams);
+          setResults(res);
+          setScreen('results');
+        }, 600);
+      };
+
+      const parseCSVData = (file) => {
+        if (!file) return;
+
+        const parseConfig = {
+          header: true,
+          skipEmptyLines: true,
+          dynamicTyping: true,
+          complete: (res) => {
+            if (!res.data || res.data.length === 0) {
+              alert("The uploaded CSV file is empty or could not be parsed.");
+              return;
+            }
+
+            const parsed = res.data.map((row, idx) => {
+              const keys = Object.keys(row);
+              const getVal = (possibleKeys) => {
+                const foundKey = keys.find(k => possibleKeys.includes(k.trim().toLowerCase()));
+                return foundKey ? row[foundKey] : null;
+              };
+
+              const nameVal = getVal(['neighborhood', 'name', 'location', 'city', 'title']) || `Node ${idx + 1}`;
+              const latVal = parseFloat(getVal(['latitude', 'lat', 'y']));
+              const lonVal = parseFloat(getVal(['longitude', 'lon', 'lng', 'long', 'x']));
+              const ordersVal = parseInt(getVal(['dailyorders', 'orders', 'daily_orders', 'volume', 'demand'])) || 100;
+
+              return {
+                id: (Date.now() + idx).toString(),
+                name: String(nameVal).trim(),
+                lat: latVal,
+                lon: lonVal,
+                orders: isNaN(ordersVal) ? 100 : ordersVal
+              };
+            }).filter(item => !isNaN(item.lat) && !isNaN(item.lon));
+
+            if (parsed.length > 0) {
+              setNeighborhoods(parsed);
+              alert(`Successfully imported ${parsed.length} data points!`);
+            } else {
+              alert("Could not find valid latitude and longitude columns in your CSV. Please ensure headers like 'lat', 'lon', and 'orders' exist.");
+            }
+          },
+          error: (err) => {
+            alert("CSV Parsing Error: " + err.message);
+          }
+        };
+
+        if (window.Papa) {
+          window.Papa.parse(file, parseConfig);
+        } else if (typeof Papa !== 'undefined') {
+          Papa.parse(file, parseConfig);
+        } else {
+          alert("CSV Parsing engine library is still loading. Please try again in a moment.");
+        }
+      };
+
+      return (
+        <div className="min-h-screen flex flex-col pb-28 relative">
+          {/* TOP HEADER */}
+          <header className="border-b border-slate-800/80 bg-slate-900/90 backdrop-blur-xl sticky top-0 z-40 px-6 py-3 flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <button 
+                onClick={() => setIsSideTabOpen(true)}
+                className="p-2 rounded-xl bg-slate-800/80 hover:bg-slate-700 text-slate-300 hover:text-white transition flex items-center justify-center border border-slate-700"
+                title="Open Sidebar Controls">
+                <span className="text-lg">☰</span>
+              </button>
+
+              <div className="flex items-center gap-3 cursor-pointer" onClick={() => setScreen('landing')}>
+                <div className="w-9 h-9 rounded-xl bg-gradient-to-tr from-indigo-600 via-indigo-500 to-cyan-400 flex items-center justify-center font-black text-xl shadow-lg shadow-indigo-500/20 text-white">
+                  G
+                </div>
+                <div>
+                  <div className="flex items-center gap-2">
+                    <span className="font-extrabold text-base tracking-wider bg-gradient-to-r from-indigo-300 via-indigo-100 to-cyan-300 bg-clip-text text-transparent">GRIDPOINT</span>
+                    <span className="text-[9px] uppercase font-bold px-2 py-0.5 rounded-md bg-indigo-500/10 text-indigo-400 border border-indigo-500/20">Enterprise Pro</span>
+                  </div>
+                  <div className="text-[10px] text-slate-500 font-medium">Google Maps Powered Supply Chain Intelligence</div>
+                </div>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-4">
+              <div className="hidden md:flex items-center gap-2.5 text-xs bg-slate-950 px-3.5 py-1.5 rounded-xl border border-slate-800">
+                <span className="text-slate-400 font-semibold">API Engine Status:</span>
+                <span className={`w-2 h-2 rounded-full ${isGoogleMapsLoaded ? 'bg-emerald-400 shadow-md shadow-emerald-500/50' : 'bg-amber-500 animate-pulse'}`}></span>
+                <span className="text-slate-200 font-bold">{isGoogleMapsLoaded ? 'Google Maps Connected' : 'Connecting API...'}</span>
+              </div>
+
+              <button 
+                onClick={() => setScreen('input')}
+                className="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold rounded-xl shadow-lg shadow-indigo-600/20 transition">
+                Configure Model
+              </button>
+            </div>
+          </header>
+
+          <main className="flex-1 flex flex-col">
+            {screen === 'landing' && (
+              <LandingPage 
+                onNext={() => setScreen('input')} 
+                onQuickRun={(kVal) => handleStartOptimization({ ...params, k: kVal })}
+              />
+            )}
+            {screen === 'input' && (
+              <InputPage 
+                neighborhoods={neighborhoods}
+                setNeighborhoods={setNeighborhoods}
+                params={params}
+                setParams={setParams}
+                parseCSVData={parseCSVData}
+                onOptimize={() => handleStartOptimization()}
+              />
+            )}
+            {screen === 'optimizing' && <OptimizingPage />}
+            {screen === 'results' && results && (
+              <ResultsPage 
+                results={results} 
+                setResults={setResults} 
+                params={params}
+                setParams={setParams}
+                neighborhoods={neighborhoods}
+                selectedWarehouseId={selectedWarehouseId}
+                setSelectedWarehouseId={setSelectedWarehouseId}
+                isGoogleMapsLoaded={isGoogleMapsLoaded}
+                onReRunOptimize={handleStartOptimization}
+              />
+            )}
+          </main>
+
+          {/* SIMPLIFIED SIDEBAR DRAWER */}
+          <SideTabDrawer 
+            isOpen={isSideTabOpen} 
+            onClose={() => setIsSideTabOpen(false)} 
+            screen={screen}
+            setScreen={setScreen}
+            setNeighborhoods={setNeighborhoods}
+            onRun={handleStartOptimization}
+          />
+
+          {/* DOCK NAVIGATION */}
+          <DockNavigation screen={screen} setScreen={setScreen} hasResults={!!results} />
+        </div>
+      );
+    }
+
+    // --- SIMPLIFIED SIDEBAR DRAWER COMPONENT ---
+    function SideTabDrawer({ isOpen, onClose, screen, setScreen, setNeighborhoods, onRun }) {
+      if (!isOpen) return null;
+
+      return (
+        <div className="fixed inset-0 z-50 flex">
+          {/* Backdrop Overlay */}
+          <div 
+            onClick={onClose}
+            className="fixed inset-0 bg-slate-950/80 backdrop-blur-md transition-opacity"></div>
+
+          {/* Side Drawer Body */}
+          <div className="relative w-72 max-w-full bg-slate-900 border-r border-slate-800 text-slate-100 flex flex-col justify-between p-6 shadow-2xl z-10 overflow-y-auto">
+            <div className="space-y-6">
+              <div className="flex items-center justify-between pb-4 border-b border-slate-800">
+                <span className="font-extrabold text-sm text-slate-200">Navigation & Tools</span>
+                <button 
+                  onClick={onClose}
+                  className="w-7 h-7 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-white flex items-center justify-center text-xs font-bold transition">
+                  ✕
+                </button>
+              </div>
+
+              {/* Clean View Navigation */}
+              <div className="space-y-1">
+                <div className="text-[10px] uppercase font-bold text-slate-500 tracking-wider mb-2 px-1">Views</div>
+                <button 
+                  onClick={() => { setScreen('landing'); onClose(); }}
+                  className={`w-full text-left px-3.5 py-2.5 rounded-xl font-semibold text-xs flex items-center gap-2.5 transition ${screen === 'landing' ? 'bg-indigo-600 text-white' : 'text-slate-400 hover:bg-slate-800/80 hover:text-slate-200'}`}>
+                  <span>🏠</span>
+                  <span>Overview</span>
+                </button>
+                <button 
+                  onClick={() => { setScreen('input'); onClose(); }}
+                  className={`w-full text-left px-3.5 py-2.5 rounded-xl font-semibold text-xs flex items-center gap-2.5 transition ${screen === 'input' ? 'bg-indigo-600 text-white' : 'text-slate-400 hover:bg-slate-800/80 hover:text-slate-200'}`}>
+                  <span>⚙️</span>
+                  <span>Model Input</span>
+                </button>
+              </div>
+
+              {/* Dataset Controls */}
+              <div className="space-y-2 pt-4 border-t border-slate-800/80">
+                <div className="text-[10px] uppercase font-bold text-slate-500 tracking-wider mb-1 px-1">Dataset Actions</div>
+                <button 
+                  onClick={() => { setNeighborhoods(DEFAULT_NEIGHBORHOODS); alert("Reset to default Bengaluru locations."); }}
+                  className="w-full text-left px-3.5 py-2 rounded-xl bg-slate-950/80 hover:bg-slate-800 border border-slate-800 font-medium text-xs text-slate-300 transition flex items-center justify-between">
+                  <span>Reset Default Locations</span>
+                  <span className="text-slate-500">↺</span>
+                </button>
+                <button 
+                  onClick={() => { setNeighborhoods([]); alert("Cleared all demand points."); }}
+                  className="w-full text-left px-3.5 py-2 rounded-xl bg-slate-950/80 hover:bg-rose-950/30 border border-slate-800 hover:border-rose-900/50 font-medium text-xs text-rose-400 transition flex items-center justify-between">
+                  <span>Clear All Locations</span>
+                  <span className="text-rose-500">🗑️</span>
+                </button>
+              </div>
+            </div>
+
+            {/* Run Action */}
+            <div className="pt-4 border-t border-slate-800 mt-6">
+              <button 
+                onClick={() => { onClose(); onRun(); }}
+                className="w-full py-2.5 bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-xs rounded-xl shadow-lg shadow-indigo-600/30 transition">
+                ⚡ Run Optimization
+              </button>
+            </div>
+          </div>
+        </div>
+      );
+    }
+
+    // --- DOCK NAVIGATION COMPONENT ---
+    function DockNavigation({ screen, setScreen, hasResults }) {
+      const [indicatorStyle, setIndicatorStyle] = useState({ left: 0, width: 0 });
+      const navRefs = {
+        landing: useRef(null),
+        input: useRef(null),
+        results: useRef(null)
+      };
+
+      useEffect(() => {
+        const activeRef = navRefs[screen]?.current;
+        if (activeRef) {
+          setIndicatorStyle({
+            left: activeRef.offsetLeft,
+            width: activeRef.offsetWidth
+          });
+        }
+      }, [screen, hasResults]);
+
+      return (
+        <div className="dock-wrapper fixed bottom-6 left-1/2 -translate-x-1/2 z-50">
+          <div className="relative px-2 py-2 rounded-2xl bg-slate-900/85 backdrop-blur-2xl border border-slate-700/60 shadow-[0_20px_50px_rgba(0,0,0,0.6)] flex items-center gap-1">
+            
+            <div 
+              className="dock-pill-indicator absolute top-2 bottom-2 rounded-xl bg-gradient-to-r from-indigo-600 to-indigo-500 shadow-lg shadow-indigo-600/40 pointer-events-none"
+              style={{
+                transform: `translateX(${indicatorStyle.left}px)`,
+                width: `${indicatorStyle.width}px`
+              }}
+            />
+
+            <button 
+              ref={navRefs.landing}
+              onClick={() => setScreen('landing')}
+              className={`dock-btn relative z-10 px-5 py-2.5 rounded-xl flex items-center gap-2.5 font-bold text-xs ${screen === 'landing' ? 'text-white' : 'text-slate-400 hover:text-slate-200'}`}>
+              <span className="text-base">🏠</span>
+              <span>Overview</span>
+            </button>
+
+            <button 
+              ref={navRefs.input}
+              onClick={() => setScreen('input')}
+              className={`dock-btn relative z-10 px-5 py-2.5 rounded-xl flex items-center gap-2.5 font-bold text-xs ${screen === 'input' ? 'text-white' : 'text-slate-400 hover:text-slate-200'}`}>
+              <span className="text-base">⚙️</span>
+              <span>Model Input</span>
+            </button>
+
+            <button 
+              ref={navRefs.results}
+              onClick={() => hasResults && setScreen('results')}
+              disabled={!hasResults}
+              className={`dock-btn relative z-10 px-5 py-2.5 rounded-xl flex items-center gap-2.5 font-bold text-xs ${!hasResults ? 'opacity-40 cursor-not-allowed text-slate-600' : screen === 'results' ? 'text-white' : 'text-slate-400 hover:text-slate-200'}`}>
+              <span className="text-base">🗺️</span>
+              <span>Analytics Dashboard</span>
+            </button>
+          </div>
+        </div>
+      );
+    }
+
+    // --- INTERACTIVE HOVER DESCRIPTION CARD COMPONENT ---
+    function FeatureCard({ icon, title, description, highlightTag }) {
+      return (
+        <div className="feature-card bg-slate-900/60 border border-slate-800/80 p-6 rounded-3xl backdrop-blur-xl flex flex-col justify-between cursor-pointer">
+          <div>
+            <div className="flex items-center justify-between mb-4">
+              <div className="text-2xl p-2.5 bg-slate-950 rounded-2xl border border-slate-800/80 inline-block">
+                {icon}
+              </div>
+              <span className="text-[10px] font-bold px-2.5 py-1 rounded-full bg-slate-800/80 text-slate-400 border border-slate-700/60">
+                {highlightTag}
+              </span>
+            </div>
+
+            <h4 className="text-sm font-bold text-slate-200 mb-2 group-hover:text-indigo-400 transition-colors">
+              {title}
+            </h4>
+            <p className="text-xs text-slate-400 leading-relaxed font-normal">
+              {description}
+            </p>
+          </div>
+        </div>
+      );
+    }
+
+    // --- LANDING PAGE ---
+    function LandingPage({ onNext, onQuickRun }) {
+      const [activeDemoHub, setActiveDemoHub] = useState('W2');
+
+      const demoHubs = {
+        W1: { name: 'Warehouse 1 (North Sector)', nodes: 4, demand: '4,200 orders/day', dist: '3.4 km avg', color: '#818cf8', util: '78%' },
+        W2: { name: 'Warehouse 2 (Central Tech Hub)', nodes: 5, demand: '6,850 orders/day', dist: '2.1 km avg', color: '#34d399', util: '92%' },
+        W3: { name: 'Warehouse 3 (South Corridor)', nodes: 3, demand: '2,900 orders/day', dist: '4.8 km avg', color: '#fbbf24', util: '64%' }
+      };
+
+      return (
+        <div className="flex-1 flex flex-col items-center justify-between px-6 py-10 max-w-7xl w-full mx-auto relative overflow-hidden space-y-12">
+          {/* Background Ambient Glow */}
+          <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top,rgba(99,102,241,0.18)_0,transparent_65%)] pointer-events-none"></div>
+
+          {/* Hero Section Header */}
+          <div className="text-center max-w-3xl z-10">
+            <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-indigo-500/10 border border-indigo-500/20 text-indigo-400 text-xs font-semibold mb-6 shadow-inner">
+              <span>🚀</span> Spatial Intelligence & Automated Hub Allocation
+            </div>
+
+            <h1 className="text-4xl md:text-6xl font-black tracking-tight leading-tight mb-5">
+              Optimize Delivery Logistics <br/>
+              <span className="bg-gradient-to-r from-indigo-400 via-purple-300 to-cyan-400 bg-clip-text text-transparent">
+                With Precision K-Means Centroids.
+              </span>
+            </h1>
+
+            <p className="text-slate-400 text-sm md:text-base max-w-2xl mx-auto leading-relaxed font-normal">
+              Eliminate last-mile delivery bottlenecks. Simulates optimal warehouse placements, service radii, traffic delays, vehicle constraints, and cost trade-offs in real time on Google Maps.
+            </p>
+          </div>
+
+          {/* Interactive Live Preview Component */}
+          <div className="w-full grid grid-cols-1 lg:grid-cols-12 gap-6 z-10">
+            
+            {/* Interactive Hub Simulator Box */}
+            <div className="lg:col-span-7 bg-slate-900/90 border border-slate-800 rounded-3xl p-6 shadow-2xl backdrop-blur-xl flex flex-col justify-between">
+              <div>
+                <div className="flex items-center justify-between mb-4">
+                  <div>
+                    <h3 className="text-sm font-bold text-slate-200">Interactive Hub Network Inspector</h3>
+                    <p className="text-[11px] text-slate-400">Click a hub marker to test live topology feedback</p>
+                  </div>
+                  <span className="text-[10px] font-bold px-2.5 py-1 rounded-lg bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
+                    Live Demo Mode
+                  </span>
+                </div>
+
+                {/* Hub Selection Buttons */}
+                <div className="flex items-center gap-3 mb-6">
+                  {Object.keys(demoHubs).map(hubKey => {
+                    const isSelected = activeDemoHub === hubKey;
+                    const hubData = demoHubs[hubKey];
+                    return (
+                      <button
+                        key={hubKey}
+                        onClick={() => setActiveDemoHub(hubKey)}
+                        className={`flex-1 py-3 px-4 rounded-2xl border font-bold text-xs transition flex items-center justify-between ${
+                          isSelected 
+                            ? 'border-indigo-500 bg-indigo-950/60 text-white shadow-lg shadow-indigo-500/20 scale-[1.02]' 
+                            : 'border-slate-800 bg-slate-950/60 text-slate-400 hover:border-slate-700'
+                        }`}>
+                        <span className="flex items-center gap-2">
+                          <span className="w-3 h-3 rounded-full" style={{ backgroundColor: hubData.color }}></span>
+                          {hubKey}
+                        </span>
+                        <span className="text-[10px] opacity-75">{hubData.util}</span>
+                      </button>
+                    );
+                  })}
+                </div>
+
+                {/* Dynamic Content Display */}
+                <div className="bg-slate-950 p-5 rounded-2xl border border-slate-800/80 space-y-4">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-bold text-indigo-400">{demoHubs[activeDemoHub].name}</span>
+                    <span className="text-[10px] bg-slate-800 text-slate-300 font-bold px-2 py-0.5 rounded-md">
+                      Status: Active
+                    </span>
+                  </div>
+
+                  <div className="grid grid-cols-3 gap-3 text-center">
+                    <div className="bg-slate-900/80 p-3 rounded-xl border border-slate-800">
+                      <div className="text-[9px] uppercase font-bold text-slate-500">Coverage</div>
+                      <div className="text-sm font-extrabold text-slate-200 mt-0.5">{demoHubs[activeDemoHub].nodes} Zones</div>
+                    </div>
+                    <div className="bg-slate-900/80 p-3 rounded-xl border border-slate-800">
+                      <div className="text-[9px] uppercase font-bold text-slate-500">Volume</div>
+                      <div className="text-sm font-extrabold text-slate-200 mt-0.5">{demoHubs[activeDemoHub].demand}</div>
+                    </div>
+                    <div className="bg-slate-900/80 p-3 rounded-xl border border-slate-800">
+                      <div className="text-[9px] uppercase font-bold text-slate-500">Avg Distance</div>
+                      <div className="text-sm font-extrabold text-emerald-400 mt-0.5">{demoHubs[activeDemoHub].dist}</div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Quick Launch Button */}
+              <div className="mt-6 flex items-center justify-between pt-4 border-t border-slate-800/60">
+                <span className="text-xs text-slate-400 font-medium">Ready to optimize your dataset?</span>
+                <button 
+                  onClick={onNext}
+                  className="px-5 py-2.5 bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-xs rounded-xl shadow-lg shadow-indigo-600/20 transition flex items-center gap-2">
+                  <span>Open Configurator</span>
+                  <span>→</span>
+                </button>
+              </div>
+            </div>
+
+            {/* Quick-Start Presets Card */}
+            <div className="lg:col-span-5 bg-slate-900/90 border border-slate-800 rounded-3xl p-6 shadow-2xl backdrop-blur-xl flex flex-col justify-between">
+              <div>
+                <h3 className="text-sm font-bold text-slate-200 mb-1">Instant Model Presets</h3>
+                <p className="text-[11px] text-slate-400 mb-5">Launch standard cluster profiles directly into the analytics engine.</p>
+
+                <div className="space-y-3">
+                  <button 
+                    onClick={() => onQuickRun(2)}
+                    className="w-full text-left p-3.5 rounded-2xl border border-slate-800 bg-slate-950 hover:border-indigo-500/50 transition group flex items-center justify-between">
+                    <div>
+                      <div className="font-bold text-xs group-hover:text-indigo-400 transition">Dual Hub Model (K=2)</div>
+                      <div className="text-[10px] text-slate-500">Consolidated capex, optimized for smaller metropolitan regions</div>
+                    </div>
+                    <span className="text-xs font-bold text-slate-600 group-hover:text-indigo-400">Run →</span>
+                  </button>
+
+                  <button 
+                    onClick={() => onQuickRun(3)}
+                    className="w-full text-left p-3.5 rounded-2xl border border-indigo-500/30 bg-indigo-950/20 hover:border-indigo-500 transition group flex items-center justify-between">
+                    <div>
+                      <div className="font-bold text-xs text-indigo-300">Standard Tri-Hub Model (K=3)</div>
+                      <div className="text-[10px] text-indigo-400/80">Balanced balance between capex and last-mile fuel efficiency</div>
+                    </div>
+                    <span className="text-xs font-bold text-indigo-400">Run →</span>
+                  </button>
+
+                  <button 
+                    onClick={() => onQuickRun(5)}
+                    className="w-full text-left p-3.5 rounded-2xl border border-slate-800 bg-slate-950 hover:border-indigo-500/50 transition group flex items-center justify-between">
+                    <div>
+                      <div className="font-bold text-xs group-hover:text-indigo-400 transition">High-Density Mesh (K=5)</div>
+                      <div className="text-[10px] text-slate-500">Ultra-fast delivery times, best for 15-minute quick commerce</div>
+                    </div>
+                    <span className="text-xs font-bold text-slate-600 group-hover:text-indigo-400">Run →</span>
+                  </button>
+                </div>
+              </div>
+
+              <div className="mt-5 text-center text-[11px] text-slate-500 font-medium">
+                Supports CSV import for custom global latitude/longitude points.
+              </div>
+            </div>
+
+          </div>
+
+          {/* INTERACTIVE HOVER DESCRIPTION CARDS */}
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6 w-full z-10 pt-2">
+            <FeatureCard 
+              icon="📍"
+              title="Google Maps Spatial Engine"
+              description="Interactive spatial visualization with draggable facility pins, custom service boundaries, and demand line overlays."
+              highlightTag="Map API v3"
+            />
+
+            <FeatureCard 
+              icon="⚡"
+              title="Dynamic Sensitivity Sliders"
+              description="Re-calculate fuel costs, labor rates, and traffic multiplier impacts instantly without re-running calculations."
+              highlightTag="Live Feedback"
+            />
+
+            <FeatureCard 
+              icon="📊"
+              title="K-Value Trade-off Curve"
+              description="Directly compare capital expenditure vs delivery costs to discover the mathematical sweet spot for hub quantity."
+              highlightTag="Cost Analytics"
+            />
+          </div>
+
+        </div>
+      );
+    }
+
+    // --- MODEL INPUT PAGE ---
+    function InputPage({ 
+      neighborhoods, setNeighborhoods, params, setParams,
+      parseCSVData, onOptimize 
+    }) {
+      const [newPt, setNewPt] = useState({ name: '', lat: '', lon: '', orders: '' });
+      const fileInputRef = useRef(null);
+
+      const handleFileChange = (e) => {
+        if (e.target.files && e.target.files[0]) {
+          parseCSVData(e.target.files[0]);
+          e.target.value = '';
+        }
+      };
+
+      return (
+        <div className="flex-1 max-w-7xl w-full mx-auto p-6 grid grid-cols-1 lg:grid-cols-12 gap-8">
+          <div className="lg:col-span-7 space-y-6">
+            <div className="bg-slate-900 border border-slate-800 rounded-3xl p-6 shadow-xl">
+              <div className="flex items-center justify-between mb-4">
+                <div>
+                  <h2 className="text-lg font-bold">Demand Neighborhoods ({neighborhoods.length})</h2>
+                  <p className="text-xs text-slate-400">Import custom node datasets via CSV or manual entry.</p>
+                </div>
+                <div className="flex items-center gap-2">
+                  <button 
+                    onClick={() => setNeighborhoods(DEFAULT_NEIGHBORHOODS)}
+                    className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-bold rounded-xl border border-slate-700 transition">
+                    Reset Default
+                  </button>
+                  <button 
+                    onClick={() => fileInputRef.current && fileInputRef.current.click()}
+                    className="px-4 py-1.5 bg-indigo-600 text-white text-xs font-bold rounded-xl hover:bg-indigo-500 transition shadow-lg shadow-indigo-600/20">
+                    Upload CSV
+                  </button>
+                  <input 
+                    type="file" 
+                    ref={fileInputRef} 
+                    accept=".csv, text/csv, application/vnd.ms-excel" 
+                    onChange={handleFileChange} 
+                    className="hidden" 
+                  />
+                </div>
+              </div>
+
+              <div className="overflow-x-auto max-h-[360px] border border-slate-800 rounded-2xl mb-4">
+                <table className="w-full text-left text-xs">
+                  <thead className="bg-slate-950 text-slate-400 font-bold uppercase sticky top-0 border-b border-slate-800">
+                    <tr>
+                      <th className="p-3">Location Name</th>
+                      <th className="p-3">Latitude</th>
+                      <th className="p-3">Longitude</th>
+                      <th className="p-3">Daily Orders</th>
+                      <th className="p-3 text-center">Action</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-800/60 font-medium">
+                    {neighborhoods.map((item) => (
+                      <tr key={item.id} className="hover:bg-slate-800/40">
+                        <td className="p-3 font-semibold text-slate-200">{item.name}</td>
+                        <td className="p-3 text-slate-400">{item.lat}</td>
+                        <td className="p-3 text-slate-400">{item.lon}</td>
+                        <td className="p-3 font-bold text-indigo-400">{item.orders}</td>
+                        <td className="p-3 text-center">
+                          <button 
+                            onClick={() => setNeighborhoods(neighborhoods.filter(n => n.id !== item.id))}
+                            className="text-rose-400 font-bold hover:underline">
+                            Delete
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-5 gap-2">
+                <input placeholder="Name" value={newPt.name} onChange={e=>setNewPt({...newPt, name: e.target.value})} className="bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs" />
+                <input placeholder="Lat" value={newPt.lat} onChange={e=>setNewPt({...newPt, lat: e.target.value})} className="bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs" />
+                <input placeholder="Lon" value={newPt.lon} onChange={e=>setNewPt({...newPt, lon: e.target.value})} className="bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs" />
+                <input placeholder="Orders" value={newPt.orders} onChange={e=>setNewPt({...newPt, orders: e.target.value})} className="bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs" />
+                <button 
+                  onClick={() => {
+                    if (!newPt.name || !newPt.lat || !newPt.lon) return;
+                    setNeighborhoods([...neighborhoods, { id: Date.now().toString(), name: newPt.name, lat: parseFloat(newPt.lat), lon: parseFloat(newPt.lon), orders: parseInt(newPt.orders)||100 }]);
+                    setNewPt({ name: '', lat: '', lon: '', orders: '' });
+                  }}
+                  className="bg-slate-800 hover:bg-slate-700 text-white text-xs font-bold rounded-xl py-2 transition">
+                  + Add Node
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <div className="lg:col-span-5 bg-slate-900 border border-slate-800 rounded-3xl p-6 shadow-xl flex flex-col justify-between space-y-6">
+            <div>
+              <h2 className="text-lg font-bold mb-1">Constraint & Fleet Parameters</h2>
+              <p className="text-xs text-slate-400 mb-5">Configure physical and economic rules for clustering.</p>
+
+              <div className="space-y-4 text-xs">
+                <div>
+                  <div className="flex justify-between font-bold mb-1">
+                    <span>Number of Warehouses (K)</span>
+                    <span className="text-indigo-400">{params.k} Hubs</span>
+                  </div>
+                  <input type="range" min="1" max="6" value={params.k} onChange={e => setParams({...params, k: parseInt(e.target.value)})} className="w-full accent-indigo-500" />
+                </div>
+
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="block font-bold mb-1 text-slate-300">Max Hub Capacity</label>
+                    <input type="number" value={params.capacityConstraint} onChange={e => setParams({...params, capacityConstraint: parseInt(e.target.value)||0})} className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-slate-200 font-semibold" />
+                  </div>
+                  <div>
+                    <label className="block font-bold mb-1 text-slate-300">Max Service Radius (km)</label>
+                    <input type="number" value={params.maxRadiusConstraint} onChange={e => setParams({...params, maxRadiusConstraint: parseInt(e.target.value)||0})} className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-slate-200 font-semibold" />
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block font-bold mb-1 text-slate-300">Fixed Warehouse Capex (₹ / Hub)</label>
+                  <input type="number" value={params.fixedWhCost} onChange={e => setParams({...params, fixedWhCost: parseInt(e.target.value)||0})} className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-slate-200 font-semibold" />
+                </div>
+
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="block font-bold mb-1 text-slate-300">Vehicle Type</label>
+                    <select value={params.vehicleType} onChange={e => setParams({...params, vehicleType: e.target.value})} className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-slate-200 font-semibold">
+                      <option value="TWO_WHEELER">2-Wheeler (EV / Bike)</option>
+                      <option value="VAN">Cargo Van (LCV)</option>
+                      <option value="MDT">Medium Duty Truck (MDT)</option>
+                      <option value="HDT">Heavy Duty Truck (HDT)</option>
+                      <option value="COLD_CHAIN">Refrigerated Cold Chain</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block font-bold mb-1 text-slate-300">Traffic Delay Factor</label>
+                    <select value={params.trafficMultiplier} onChange={e => setParams({...params, trafficMultiplier: parseFloat(e.target.value)})} className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-slate-200 font-semibold">
+                      <option value="1.05">Low (1.05x Off-Peak / Highway)</option>
+                      <option value="1.20">Standard (1.20x Daytime Urban)</option>
+                      <option value="1.35">Moderate (1.35x Peak Hours)</option>
+                      <option value="1.65">Severe (1.65x Gridlock / Delay)</option>
+                      <option value="1.80">Extreme (1.80x Max Weather Disrupt)</option>
+                    </select>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <button 
+              onClick={onOptimize}
+              className="w-full py-4 bg-indigo-600 hover:bg-indigo-500 text-white font-bold rounded-2xl shadow-xl shadow-indigo-600/30 transition hover:scale-[1.02]">
+              Run Optimization Model
+            </button>
+          </div>
+        </div>
+      );
+    }
+
+    function OptimizingPage() {
+      return (
+        <div className="flex-1 flex flex-col items-center justify-center p-6 text-center">
+          <div className="w-16 h-16 border-4 border-indigo-500/20 border-t-indigo-500 rounded-full animate-spin mb-6"></div>
+          <h2 className="text-2xl font-bold">Computing Spatial Centroids...</h2>
+          <p className="text-slate-500 text-xs mt-1">Simulating minimum weighted Euclidean geometry</p>
+        </div>
+      );
+    }
+
+    // --- ANALYTICS DASHBOARD ---
+    function ResultsPage({ 
+      results, setResults, params, setParams, neighborhoods,
+      selectedWarehouseId, setSelectedWarehouseId, isGoogleMapsLoaded, onReRunOptimize 
+    }) {
+      const gmapRef = useRef(null);
+      const googleMapInstance = useRef(null);
+      const activeOverlays = useRef([]);
+      const activeInfoWindows = useRef([]);
+
+      const handleLiveParamChange = (key, val) => {
+        const updatedParams = { ...params, [key]: val };
+        setParams(updatedParams);
+        
+        if (key === 'k') {
+          onReRunOptimize(updatedParams);
+          return;
+        }
+
+        const reCalc = recalculateMetrics(results.warehouses, neighborhoods, updatedParams, results.unoptimizedCenter);
+        setResults(prev => ({ ...prev, ...reCalc }));
+      };
+
+      const createCustomWarehouseMarker = (label, color, isSelected) => {
+        const width = isSelected ? 48 : 40;
+        const height = isSelected ? 56 : 48;
+        const svg = `
+          <svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 40 48" fill="none">
+            <filter id="shadow" x="0" y="0" width="40" height="48" filterUnits="userSpaceOnUse">
+              <feDropShadow dx="0" dy="4" stdDeviation="4" flood-color="#000000" flood-opacity="0.6"/>
+            </filter>
+            <path d="M20 0C8.954 0 0 8.954 0 20C0 32 20 48 20 48C20 48 40 32 40 20C40 8.954 31.046 0 20 0Z" fill="${color}" filter="url(#shadow)"/>
+            <circle cx="20" cy="19" r="13" fill="#0f172a" stroke="#ffffff" stroke-width="2"/>
+            <text x="20" y="23" fill="#ffffff" font-size="11" font-weight="900" font-family="sans-serif" text-anchor="middle">${label}</text>
+          </svg>
+        `;
+        return 'data:image/svg+xml;charset=UTF-8,' + encodeURIComponent(svg);
+      };
+
+      const smoothPanToWithZoom = (map, targetLat, targetLng, targetZoom = 13) => {
+        if (!map) return;
+        const startLat = map.getCenter().lat();
+        const startLng = map.getCenter().lng();
+
+        const duration = 800;
+        const startTime = performance.now();
+
+        const easeOutCubic = (t) => 1 - Math.pow(1 - t, 3);
+
+        const animateStep = (now) => {
+          const elapsed = now - startTime;
+          const progress = Math.min(elapsed / duration, 1);
+          const easeProgress = easeOutCubic(progress);
+
+          const currentLat = startLat + (targetLat - startLat) * easeProgress;
+          const currentLng = startLng + (targetLng - startLng) * easeProgress;
+
+          map.setCenter({ lat: currentLat, lng: currentLng });
+
+          if (progress < 1) {
+            requestAnimationFrame(animateStep);
+          } else {
+            if (map.getZoom() !== targetZoom) {
+              map.setZoom(targetZoom);
+            }
+          }
+        };
+
+        requestAnimationFrame(animateStep);
+      };
+
+      useEffect(() => {
+        if (!isGoogleMapsLoaded || !gmapRef.current) return;
+
+        const centerLat = results.unoptimizedCenter.lat;
+        const centerLon = results.unoptimizedCenter.lon;
+
+        if (!googleMapInstance.current) {
+          googleMapInstance.current = new window.google.maps.Map(gmapRef.current, {
+            center: { lat: centerLat, lng: centerLon },
+            zoom: 11,
+            styles: GOOGLE_DARK_STYLE,
+            disableDefaultUI: false,
+            zoomControl: true
+          });
+        }
+
+        const map = googleMapInstance.current;
+
+        activeOverlays.current.forEach(overlay => overlay.setMap(null));
+        activeOverlays.current = [];
+        activeInfoWindows.current = [];
+
+        results.assignments.forEach(item => {
+          const wh = results.warehouses[item.assignedWarehouse];
+          if (!wh) return;
+          const color = PALETTE[item.assignedWarehouse % PALETTE.length];
+
+          const polyline = new window.google.maps.Polyline({
+            path: [
+              { lat: item.lat, lng: item.lon },
+              { lat: wh.lat, lng: wh.lon }
+            ],
+            geodesic: true,
+            strokeColor: item.exceedsRadius ? '#f43f5e' : color,
+            strokeOpacity: 0.65,
+            strokeWeight: item.exceedsRadius ? 3 : 2,
+            map: map
+          });
+          activeOverlays.current.push(polyline);
+
+          const markerCircle = new window.google.maps.Marker({
+            position: { lat: item.lat, lng: item.lon },
+            map: map,
+            title: item.name,
+            icon: {
+              path: window.google.maps.SymbolPath.CIRCLE,
+              scale: Math.max(5, Math.min(12, item.effectiveOrders / 150)),
+              fillColor: color,
+              fillOpacity: 0.9,
+              strokeWeight: 1.5,
+              strokeColor: '#ffffff'
+            }
+          });
+
+          const infoWindow = new window.google.maps.InfoWindow({
+            content: `
+              <div style="padding: 2px;">
+                <div style="font-size: 13px; font-weight: 800; color: #f8fafc; margin-bottom: 6px;">${item.name}</div>
+                <div style="font-size: 11px; color: #94a3b8; display: flex; justify-between: space-between; gap: 12px; margin-bottom: 2px;">
+                  <span>Effective Demand:</span> <strong style="color:#6366f1;">${item.effectiveOrders} units</strong>
+                </div>
+                <div style="font-size: 11px; color: #94a3b8; display: flex; justify-between: space-between; gap: 12px; margin-bottom: 2px;">
+                  <span>Assigned Facility:</span> <strong style="color:${color};">Warehouse ${wh.id}</strong>
+                </div>
+                <div style="font-size: 11px; color: #94a3b8; display: flex; justify-between: space-between; gap: 12px;">
+                  <span>Transit Distance:</span> <strong>${item.distance.toFixed(1)} km</strong>
+                </div>
+                ${item.exceedsRadius ? '<div style="margin-top:6px; font-size:10px; font-weight:700; color:#f43f5e; background:rgba(244,63,94,0.1); padding:4px; border-radius:6px; text-align:center;">⚠️ Radius Violation Exceeded</div>' : ''}
+              </div>
+            `
+          });
+
+          markerCircle.addListener('click', () => {
+            infoWindow.open(map, markerCircle);
+          });
+
+          activeOverlays.current.push(markerCircle);
+        });
+
+        results.warehouses.forEach((wh, idx) => {
+          const color = PALETTE[idx % PALETTE.length];
+          const isSelected = selectedWarehouseId === wh.id;
+
+          if (params.maxRadiusConstraint > 0) {
+            const circleRadius = new window.google.maps.Circle({
+              strokeColor: color,
+              strokeOpacity: 0.85,
+              strokeWeight: 2,
+              fillColor: color,
+              fillOpacity: 0.12,
+              map: map,
+              center: { lat: wh.lat, lng: wh.lon },
+              radius: params.maxRadiusConstraint * 1000,
+              clickable: false
+            });
+            activeOverlays.current.push(circleRadius);
+
+            const circleBoundary = new window.google.maps.Circle({
+              strokeColor: '#ffffff',
+              strokeOpacity: 0.4,
+              strokeWeight: 1,
+              fillOpacity: 0,
+              map: map,
+              center: { lat: wh.lat, lng: wh.lon },
+              radius: params.maxRadiusConstraint * 1000,
+              clickable: false
+            });
+            activeOverlays.current.push(circleBoundary);
+          }
+
+          const whMarker = new window.google.maps.Marker({
+            position: { lat: wh.lat, lng: wh.lon },
+            map: map,
+            draggable: true,
+            title: `Warehouse ${wh.id}`,
+            icon: {
+              url: createCustomWarehouseMarker(`W${wh.id}`, color, isSelected),
+              scaledSize: isSelected ? new window.google.maps.Size(48, 56) : new window.google.maps.Size(40, 48),
+              anchor: isSelected ? new window.google.maps.Point(24, 56) : new window.google.maps.Point(20, 48)
+            }
+          });
+
+          const whInfoWindow = new window.google.maps.InfoWindow({
+            content: `
+              <div style="min-width: 190px; padding: 2px;">
+                <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px;">
+                  <span style="font-size: 14px; font-weight: 800; color: ${color};">Warehouse ${wh.id}</span>
+                  <span style="font-size: 10px; background: rgba(99,102,241,0.15); color: #818cf8; font-weight: 700; padding: 2px 6px; border-radius: 4px;">W${wh.id}</span>
+                </div>
+                
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 6px; margin-bottom: 8px;">
+                  <div style="background: rgba(30,41,59,0.8); padding: 6px; border-radius: 8px; text-align: center;">
+                    <div style="font-size: 9px; color: #94a3b8; font-weight: 700; text-transform: uppercase;">Volume</div>
+                    <div style="font-size: 12px; font-weight: 800; color: #f8fafc; margin-top: 2px;">${wh.totalOrders.toLocaleString()}</div>
+                  </div>
+                  <div style="background: rgba(30,41,59,0.8); padding: 6px; border-radius: 8px; text-align: center;">
+                    <div style="font-size: 9px; color: #94a3b8; font-weight: 700; text-transform: uppercase;">Capacity</div>
+                    <div style="font-size: 12px; font-weight: 800; color: ${wh.exceedsCapacity ? '#f43f5e' : '#34d399'}; margin-top: 2px;">${wh.capacityUtilization}%</div>
+                  </div>
+                </div>
+
+                <div style="font-size: 11px; color: #94a3b8; margin-bottom: 4px;">
+                  Served Nodes: <strong style="color: #f8fafc;">${wh.assignedCount} Neighborhoods</strong>
+                </div>
+                <div style="font-size: 11px; color: #94a3b8; margin-bottom: 6px;">
+                  Avg Transit: <strong style="color: #f8fafc;">${wh.avgDistanceKm} km</strong>
+                </div>
+
+                <div style="font-size: 9px; color: #64748b; border-top: 1px solid #334155; padding-top: 6px; text-align: center;">
+                  💡 Drag pin to manually recalibrate location
+                </div>
+              </div>
+            `
+          });
+
+          whMarker.addListener('click', () => {
+            setSelectedWarehouseId(wh.id);
+            activeInfoWindows.current.forEach(iw => iw.close());
+            whInfoWindow.open(map, whMarker);
+            smoothPanToWithZoom(map, wh.lat, wh.lon, 13);
+          });
+
+          whMarker.addListener('dragend', (e) => {
+            const newLat = e.latLng.lat();
+            const newLng = e.latLng.lng();
+            const updatedWarehouses = [...results.warehouses];
+            updatedWarehouses[idx] = { ...wh, lat: newLat, lon: newLng };
+
+            const recalculated = recalculateMetrics(updatedWarehouses, neighborhoods, params, results.unoptimizedCenter);
+            setResults(prev => ({ ...prev, ...recalculated }));
+          });
+
+          activeOverlays.current.push(whMarker);
+          activeInfoWindows.current.push(whInfoWindow);
+        });
+
+      }, [isGoogleMapsLoaded, results, selectedWarehouseId]);
+
+      const focusWarehouse = (wh) => {
+        setSelectedWarehouseId(wh.id);
+        if (googleMapInstance.current) {
+          smoothPanToWithZoom(googleMapInstance.current, wh.lat, wh.lon, 13);
+        }
+      };
+
+      return (
+        <div className="flex-1 flex flex-col lg:flex-row gap-6 p-6 max-w-[1700px] w-full mx-auto">
+          {/* GOOGLE MAP DISPLAY PANEL */}
+          <div className="lg:w-7/12 flex flex-col bg-slate-900 border border-slate-800 rounded-3xl overflow-hidden shadow-2xl min-h-[550px] relative">
+            <div className="p-4 bg-slate-950 border-b border-slate-800 flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <span className="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-ping"></span>
+                <span className="text-xs font-bold uppercase tracking-wider text-slate-300">Google Maps Spatial Distribution</span>
+              </div>
+              <span className="text-xs text-indigo-400 font-semibold">Drag warehouse pins to recalibrate</span>
+            </div>
+            
+            {!isGoogleMapsLoaded ? (
+              <div className="flex-1 flex flex-col items-center justify-center p-8 text-center bg-slate-950/60">
+                <div className="w-10 h-10 border-4 border-indigo-500/20 border-t-indigo-500 rounded-full animate-spin mb-4"></div>
+                <h3 className="text-base font-bold text-slate-200">Initializing Google Maps...</h3>
+              </div>
+            ) : (
+              <div ref={gmapRef} className="flex-1 w-full h-full min-h-[500px]"></div>
+            )}
+          </div>
+
+          {/* CONTROL & METRICS SIDEBAR */}
+          <div className="lg:w-5/12 flex flex-col space-y-6">
+            
+            {/* FINANCIAL & OPERATIONS SUMMARY */}
+            <div className="bg-slate-900 border border-slate-800 rounded-3xl p-6 shadow-xl space-y-4">
+              <h3 className="text-base font-bold text-slate-200">Financial & Operations Summary</h3>
+              
+              <div className="grid grid-cols-2 gap-3">
+                {/* CENTRALIZED MODEL BASELINE */}
+                <div className="bg-slate-950 p-3.5 rounded-2xl border border-slate-800">
+                  <div className="text-[10px] uppercase font-bold text-slate-400">Centralized Model Baseline</div>
+                  <div className="text-xs font-semibold text-slate-500 mt-1">Dist: {(results.beforeDistanceKm || 0).toLocaleString()} km</div>
+                  <div className="text-lg font-black text-rose-400 mt-1">₹{(results.beforeTotalCost || 0).toLocaleString()}</div>
+                </div>
+
+                {/* MULTI-HUB MODEL OPTIMIZED */}
+                <div className="bg-indigo-950/40 p-3.5 rounded-2xl border border-indigo-800/40 relative">
+                  <div className="text-[10px] uppercase font-bold text-indigo-400">Multi-Hub Model Optimized</div>
+                  <div className="text-xs font-semibold text-indigo-300 mt-1">Dist: {(results.afterDistanceKm || 0).toLocaleString()} km</div>
+                  <div className="text-lg font-black text-emerald-400 mt-1">₹{(results.totalCombinedCost || 0).toLocaleString()}</div>
+                  <div className="absolute top-3 right-3 text-[10px] bg-emerald-500 text-white px-2 py-0.5 rounded-full font-bold">
+                    ↓ {results.distanceReductionPct}%
+                  </div>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-3 gap-2 pt-1 text-center">
+                <div className="bg-slate-950/60 p-2.5 rounded-xl border border-slate-800">
+                  <div className="text-[9px] uppercase font-bold text-slate-400">Fleet Units</div>
+                  <div className="text-sm font-extrabold text-slate-200 mt-0.5">{results.fleetRequired} Vehicles</div>
+                </div>
+                <div className="bg-slate-950/60 p-2.5 rounded-xl border border-slate-800">
+                  <div className="text-[9px] uppercase font-bold text-slate-400">Transit Hours</div>
+                  <div className="text-sm font-extrabold text-slate-200 mt-0.5">{results.totalDeliveryHours} hrs</div>
+                </div>
+                <div className="bg-slate-950/60 p-2.5 rounded-xl border border-slate-800">
+                  <div className="text-[9px] uppercase font-bold text-slate-400">Radius Alerts</div>
+                  <div className={`text-sm font-extrabold mt-0.5 ${results.radiusViolations > 0 ? 'text-rose-400' : 'text-emerald-400'}`}>
+                    {results.radiusViolations} Nodes
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* DEMAND & COST SENSITIVITY SLIDERS */}
+            <div className="bg-slate-900 border border-slate-800 rounded-3xl p-5 shadow-xl space-y-3">
+              <h4 className="text-xs font-bold uppercase tracking-wider text-slate-400">Live Sensitivity Simulation</h4>
+              
+              <div className="space-y-3 text-xs">
+                <div>
+                  <div className="flex justify-between font-semibold mb-1">
+                    <span>Demand Fluctuation ({params.demandMultiplier}%)</span>
+                    <span className="text-indigo-400">{Math.round(neighborhoods.reduce((a,b)=>a+b.orders,0)*(params.demandMultiplier/100))} orders</span>
+                  </div>
+                  <input type="range" min="50" max="200" step="10" value={params.demandMultiplier} onChange={e => handleLiveParamChange('demandMultiplier', parseInt(e.target.value))} className="w-full accent-indigo-500" />
+                </div>
+
+                <div>
+                  <div className="flex justify-between font-semibold mb-1">
+                    <span>Fuel Price Index ({params.fuelPrice}%)</span>
+                    <span className="text-indigo-400">₹{results.variableFuelCost.toLocaleString()} fuel cost</span>
+                  </div>
+                  <input type="range" min="70" max="180" step="5" value={params.fuelPrice} onChange={e => handleLiveParamChange('fuelPrice', parseInt(e.target.value))} className="w-full accent-indigo-500" />
+                </div>
+              </div>
+            </div>
+
+            {/* INTERACTIVE WAREHOUSE LIST CARDS */}
+            <div className="bg-slate-900 border border-slate-800 rounded-3xl p-6 shadow-xl flex-1">
+              <h3 className="text-base font-bold mb-1">Assigned Warehouses ({results.warehouses.length})</h3>
+              <p className="text-xs text-slate-400 mb-3">Select hub card to locate on spatial map</p>
+
+              <div className="space-y-2 max-h-[220px] overflow-y-auto pr-1">
+                {results.warehouses.map((wh, idx) => {
+                  const color = PALETTE[idx % PALETTE.length];
+                  const isSelected = selectedWarehouseId === wh.id;
+                  return (
+                    <button
+                      key={wh.id}
+                      onClick={() => focusWarehouse(wh)}
+                      className={`w-full text-left p-3 rounded-2xl border transition flex items-center justify-between focus:outline-none focus:ring-2 focus:ring-indigo-500 ${
+                        isSelected 
+                          ? 'border-indigo-500 bg-indigo-950/50 shadow-lg shadow-indigo-500/10' 
+                          : 'border-slate-800 bg-slate-950 hover:border-slate-700'
+                      }`}>
+                      <div className="flex items-center gap-3">
+                        <div className="w-8 h-8 rounded-xl flex items-center justify-center font-black text-white text-xs shadow-md" style={{ backgroundColor: color }}>
+                          W{wh.id}
+                        </div>
+                        <div>
+                          <div className="font-bold text-xs">Warehouse {wh.id}</div>
+                          <div className="text-[10px] text-slate-400">{wh.assignedCount} Neighborhoods Served</div>
+                        </div>
+                      </div>
+                      <div className="text-right">
+                        <div className="font-bold text-xs">{wh.totalOrders.toLocaleString()} units</div>
+                        <div className={`text-[10px] font-bold ${wh.exceedsCapacity ? 'text-rose-400' : 'text-slate-400'}`}>
+                          {wh.capacityUtilization}% Utilized
+                        </div>
+                      </div>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* K-VALUE TRADE-OFF ANALYSIS CHART */}
+            {results.tradeOffCurve && results.tradeOffCurve.length > 0 && (
+              <div className="bg-slate-900 border border-slate-800 rounded-3xl p-5 shadow-xl">
+                <div className="flex items-center justify-between mb-3">
+                  <h4 className="text-xs font-bold uppercase tracking-wider text-slate-400">
+                    Infrastructure Cost vs. Last-Mile Delivery Cost Trade-off
+                  </h4>
+                  <span className="text-[10px] text-indigo-400 font-semibold">Click bar to set K</span>
+                </div>
+                <div className="grid grid-cols-6 gap-1.5 items-end h-28 pt-4 border-b border-slate-800 pb-2">
+                  {results.tradeOffCurve.map((point) => {
+                    const maxVal = Math.max(...results.tradeOffCurve.map(p => p.totalCost));
+                    const heightPct = Math.round((point.totalCost / maxVal) * 100);
+                    const isSelectedK = point.k === params.k;
+                    return (
+                      <div 
+                        key={point.k} 
+                        className="flex flex-col items-center h-full justify-end group cursor-pointer" 
+                        onClick={() => handleLiveParamChange('k', point.k)}>
+                        <div 
+                          className={`w-full rounded-t-lg transition-all ${isSelectedK ? 'bg-indigo-500 shadow-lg shadow-indigo-500/50' : 'bg-slate-800 group-hover:bg-slate-700'}`} 
+                          style={{ height: `${heightPct}%` }}>
+                        </div>
+                        <span className={`text-[10px] font-bold mt-1 ${isSelectedK ? 'text-indigo-400' : 'text-slate-500'}`}>
+                          K={point.k}
+                        </span>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+
+          </div>
+        </div>
+      );
+    }
+
+    const root = ReactDOM.createRoot(document.getElementById('root'));
+    root.render(<App />);
+  </script>
+</body>
+</html>
